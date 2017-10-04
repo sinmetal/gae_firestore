@@ -1,5 +1,5 @@
-application: sinmetal-firestore-2
-version: 1
+application: sinmetal-firestore-3
+version: 2
 runtime: go
 api_version: go1
 

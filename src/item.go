@@ -19,7 +19,7 @@ import (
 
 // Item
 type Item struct {
-	KeyStr    string    `json:"key" datastore:"-"`
+	KeyStr    string    `json:"key" datastore:"-" firestore:"-"`
 	Title     string    `json:"title" datastore:",noindex"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
