@@ -10,6 +10,7 @@ func init() {
 	m := http.DefaultServeMux
 	SetUpItem(m)
 	SetUpItemFire(m)
+	SetUpItemBigtable(m)
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
