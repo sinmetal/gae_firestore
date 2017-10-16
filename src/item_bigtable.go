@@ -1,8 +1,10 @@
 package gae_firestore
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -12,7 +14,17 @@ import (
 	"cloud.google.com/go/bigtable"
 )
 
+const instance = "sample"
+const table = "Item"
+const family = "myfamily"
+const column = "mycolumn"
+
 type ItemBigtableApi struct {
+}
+
+type BigtableRow struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 func SetUpItemBigtable(m *http.ServeMux) {
@@ -25,7 +37,7 @@ func (a *ItemBigtableApi) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		a.doPost(w, r)
 	} else if r.Method == "GET" {
-		http.Error(w, "", http.StatusMethodNotAllowed)
+		a.doList(w, r)
 	} else if r.Method == "PUT" {
 		http.Error(w, "", http.StatusMethodNotAllowed)
 	} else if r.Method == "DELETE" {
@@ -38,10 +50,6 @@ func (a *ItemBigtableApi) handler(w http.ResponseWriter, r *http.Request) {
 func (a *ItemBigtableApi) doPost(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 
-	const instance = "sample"
-	const table = "Item"
-	const family = "myfamily"
-
 	err := createBigtable(ctx, appengine.AppID(ctx), instance, table, family)
 	if err != nil {
 		log.Errorf(ctx, "createBigtable: %v", err)
@@ -49,7 +57,7 @@ func (a *ItemBigtableApi) doPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = updateBigtable(ctx, appengine.AppID(ctx), instance, table, family, "mycolumn")
+	err = updateBigtable(ctx, appengine.AppID(ctx), instance, table, family, column)
 	if err != nil {
 		log.Errorf(ctx, "updateBigtable: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -61,17 +69,66 @@ func (a *ItemBigtableApi) doPost(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+func (a *ItemBigtableApi) doList(w http.ResponseWriter, r *http.Request) {
+	ctx := appengine.NewContext(r)
+
+	rows, err := listBigtable(ctx, appengine.AppID(ctx), instance, table, family, column)
+	if err != nil {
+		log.Errorf(ctx, "listBigtable: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	j, err := json.Marshal(rows)
+	if err != nil {
+		log.Errorf(ctx, "json.Marshal: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+	return
+}
+
+func listBigtable(ctx context.Context, projectID string, instance string, table string, family string, column string) ([]BigtableRow, error) {
+	client, err := bigtable.NewClient(ctx, projectID, instance)
+	if err != nil {
+		return nil, fmt.Errorf("failed Bigtable.NewClient(): projectID=%s, instance=%s", projectID, instance)
+	}
+	tbl := client.Open(table)
+
+	var rows []BigtableRow
+	err = tbl.ReadRows(ctx, bigtable.PrefixRange(column), func(row bigtable.Row) bool {
+		item := row[family][0]
+		rows = append(rows, BigtableRow{
+			Key:   row.Key(),
+			Value: string(item.Value),
+		})
+		return true
+	}, bigtable.RowFilter(bigtable.ColumnFilter(column)))
+
+	if err = client.Close(); err != nil {
+		return nil, fmt.Errorf("Could not close data operations client: %v", err)
+	}
+
+	return rows, nil
+}
+
 func updateBigtable(ctx context.Context, projectID string, instance string, table string, family string, column string) error {
 	client, err := bigtable.NewClient(ctx, projectID, instance)
 	if err != nil {
 		return fmt.Errorf("failed Bigtable.NewClient(): projectID=%s, instance=%s", projectID, instance)
 	}
 	tbl := client.Open(table)
-	rmw := bigtable.NewReadModifyWrite()
-	rmw.Increment(family, column, 1)
-	_, err = tbl.ApplyReadModifyWrite(ctx, column, rmw)
+	mut := bigtable.NewMutation()
+	mut.Set(family, column, bigtable.Now(), []byte("Hello Bigtable"))
+	rowKey := fmt.Sprintf("%s%d", column, time.Now().UnixNano())
+
+	err = tbl.Apply(ctx, rowKey, mut)
 	if err != nil {
-		return fmt.Errorf("failed Bigtable.Update(): projectID=%s, instance=%s, table=%s, family=%s, column=%s: %s", projectID, instance, table, family, column, err.Error())
+		return fmt.Errorf("Could not apply bulk row mutation: %v", err)
 	}
 
 	return nil
