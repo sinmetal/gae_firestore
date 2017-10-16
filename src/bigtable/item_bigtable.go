@@ -1,4 +1,4 @@
-package gae_firestore
+package bigtable
 
 import (
 	"encoding/json"
@@ -50,14 +50,10 @@ func (a *ItemBigtableApi) handler(w http.ResponseWriter, r *http.Request) {
 func (a *ItemBigtableApi) doPost(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 
-	err := createBigtable(ctx, appengine.AppID(ctx), instance, table, family)
-	if err != nil {
-		log.Errorf(ctx, "createBigtable: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	err = updateBigtable(ctx, appengine.AppID(ctx), instance, table, family, column)
+	start := time.Now()
+	err := updateBigtable(ctx, appengine.AppID(ctx), instance, table, family, column)
+	end := time.Now()
+	log.Infof(ctx, "{\"bigtable-updateBigtable\":{\"duration\":%d}}", end.Sub(start).Nanoseconds())
 	if err != nil {
 		log.Errorf(ctx, "updateBigtable: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -72,7 +68,10 @@ func (a *ItemBigtableApi) doPost(w http.ResponseWriter, r *http.Request) {
 func (a *ItemBigtableApi) doList(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 
+	start := time.Now()
 	rows, err := listBigtable(ctx, appengine.AppID(ctx), instance, table, family, column)
+	end := time.Now()
+	log.Infof(ctx, "{\"bigtable-listBigtable\":{\"duration\":%d}}", end.Sub(start).Nanoseconds())
 	if err != nil {
 		log.Errorf(ctx, "listBigtable: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -97,6 +96,7 @@ func listBigtable(ctx context.Context, projectID string, instance string, table 
 	if err != nil {
 		return nil, fmt.Errorf("failed Bigtable.NewClient(): projectID=%s, instance=%s", projectID, instance)
 	}
+
 	tbl := client.Open(table)
 
 	var rows []BigtableRow
@@ -121,6 +121,8 @@ func updateBigtable(ctx context.Context, projectID string, instance string, tabl
 	if err != nil {
 		return fmt.Errorf("failed Bigtable.NewClient(): projectID=%s, instance=%s", projectID, instance)
 	}
+	defer client.Close()
+
 	tbl := client.Open(table)
 	mut := bigtable.NewMutation()
 	mut.Set(family, column, bigtable.Now(), []byte("Hello Bigtable"))
@@ -129,37 +131,6 @@ func updateBigtable(ctx context.Context, projectID string, instance string, tabl
 	err = tbl.Apply(ctx, rowKey, mut)
 	if err != nil {
 		return fmt.Errorf("Could not apply bulk row mutation: %v", err)
-	}
-
-	return nil
-}
-
-func createBigtable(ctx context.Context, project string, instance string, table string, columnFamily string) error {
-	adminClient, err := bigtable.NewAdminClient(ctx, project, instance)
-	if err != nil {
-		return fmt.Errorf("Could not create admin client: project=%s, instance=%s : %v", project, instance, err)
-	}
-
-	tables, err := adminClient.Tables(ctx)
-	if err != nil {
-		return fmt.Errorf("Could not fetch table list: project=%s, instance=%s : %v", project, instance, err)
-	}
-
-	if !sliceContains(tables, table) {
-		if err := adminClient.CreateTable(ctx, table); err != nil {
-			return fmt.Errorf("Could not create table %s: %v", table, err)
-		}
-	}
-
-	tblInfo, err := adminClient.TableInfo(ctx, table)
-	if err != nil {
-		return fmt.Errorf("Could not read info for table %s: %v", table, err)
-	}
-
-	if !sliceContains(tblInfo.Families, columnFamily) {
-		if err := adminClient.CreateColumnFamily(ctx, table, columnFamily); err != nil {
-			return fmt.Errorf("Could not create column family %s: %v", columnFamily, err)
-		}
 	}
 
 	return nil
