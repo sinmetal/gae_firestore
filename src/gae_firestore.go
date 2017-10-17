@@ -10,6 +10,7 @@ func init() {
 	http.HandleFunc("/hello", handler)
 
 	m := http.DefaultServeMux
+	SetUpBurst(m)
 	SetUpItem(m)
 	SetUpItemFire(m)
 	bigtable.SetUpItemBigtable(m)
