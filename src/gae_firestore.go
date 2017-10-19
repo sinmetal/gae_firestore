@@ -3,6 +3,7 @@ package gae_firestore
 import (
 	"net/http"
 
+	"bigeg"
 	"bigtable"
 )
 
@@ -15,6 +16,7 @@ func init() {
 	SetUpItemFire(m)
 	bigtable.SetUpItemBigtable(m)
 	bigtable.SetUpBigtable(m)
+	bigeg.SetUpBigItem(m)
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
