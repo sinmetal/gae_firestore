@@ -17,6 +17,7 @@ func init() {
 	bigtable.SetUpItemBigtable(m)
 	bigtable.SetUpBigtable(m)
 	bigeg.SetUpBigItem(m)
+	SetUpTaskName(m)
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
