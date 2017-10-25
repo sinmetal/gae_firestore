@@ -35,6 +35,9 @@ func (a *TaskNameApi) handler(w http.ResponseWriter, r *http.Request) {
 func (a *TaskNameApi) doPost(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 
+	queuename := r.FormValue("queuename")
+	log.Infof(c, "queuename = %s", queuename)
+
 	taskname := r.FormValue("taskname")
 	log.Infof(c, "taskname = %s", taskname)
 
@@ -44,7 +47,7 @@ func (a *TaskNameApi) doPost(w http.ResponseWriter, r *http.Request) {
 		Name:   taskname,
 	}
 
-	_, err := taskqueue.Add(c, &t, "")
+	_, err := taskqueue.Add(c, &t, queuename)
 	if err != nil {
 		log.Errorf(c, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
